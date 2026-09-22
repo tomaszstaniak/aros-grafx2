@@ -1,0 +1,13 @@
+<tmp>/grafx2-parent-test-rx_or6z7/test.c:10:14: warning: unused function 'test_getcwd' [-Wunused-function]
+   10 | static char *test_getcwd(char *buf, size_t size) {
+      |              ^~~~~~~~~~~
+1 warning generated.
+parent(AROS:Burntime): expected AROS:, got ..
+Traceback (most recent call last):
+  File "<repo>/tests/test-parent-directory.py", line 66, in <module>
+    subprocess.run([str(path / 'test')], check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<python>", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['<tmp>/grafx2-parent-test-rx_or6z7/test']' returned non-zero exit status 1.

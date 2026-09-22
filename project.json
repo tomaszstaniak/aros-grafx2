@@ -1,0 +1,5 @@
+{
+  "id": "aros-grafx2",
+  "profiles": ["aros", "upstream-patches"],
+  "structure_version": 1
+}

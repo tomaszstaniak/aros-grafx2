@@ -1,0 +1,38 @@
+schema   = 0
+id       = "grafx2"
+name     = "GrafX2"
+version  = "2.9"
+revision = 3
+summary  = "256-colour indexed paint program for AROS"
+category = "graphics/edit"
+license  = "GPL-2.0-only"
+
+depends = []
+conflicts = []
+
+# Binary names these three. AROS One supplies the ABIv11 copies; they are
+# not interchangeable with mainline. dos/intuition/graphics and the rest
+# of the ROM set are omitted: a requirement nothing can fail is noise.
+# gl.library is linked but present on both checked systems. muimaster and
+# ahi.device appear as strings and are not opened by this editor.
+# No min_version: the archive does not record the versions built against.
+[[requires_system]]
+type = "library"
+id   = "crt.library"
+
+[[requires_system]]
+type = "library"
+id   = "m.library"
+
+[[requires_system]]
+type = "library"
+id   = "stdlib.library"
+
+[[targets]]
+os   = "aros"
+arch = "x86_64"
+abi  = "v11"
+
+[install]
+subdir = "GrafX2"
+icon   = "GrafX2.info"

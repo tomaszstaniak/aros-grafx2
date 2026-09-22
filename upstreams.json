@@ -1,0 +1,8 @@
+{
+  "repositories": {
+    "grafx2": {
+      "url": "https://gitlab.com/GrafX2/grafX2.git",
+      "commit": "f84cb09dc59d706d6e7b28778b01ba911f52298c"
+    }
+  }
+}

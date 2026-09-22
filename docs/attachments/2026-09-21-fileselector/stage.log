@@ -1,0 +1,15 @@
+stage: <repo>/build/one/package/GrafX2
+<repo>/build/one/package/GrafX2
+<repo>/build/one/package/GrafX2/Licenses
+<repo>/build/one/package/GrafX2/Licenses/gpl-2.0.txt
+<repo>/build/one/package/GrafX2/Licenses/COPYRIGHT.txt
+<repo>/build/one/package/GrafX2/GrafX2
+<repo>/build/one/package/GrafX2/ReadMe.txt
+<repo>/build/one/package/GrafX2/GrafX2.info
+<repo>/build/one/package/GrafX2/data
+<repo>/build/one/package/GrafX2/data/skins
+<repo>/build/one/package/GrafX2/data/gfx2.png
+<repo>/build/one/package/GrafX2/data/scripts
+<repo>/build/one/package/GrafX2/data/gfx2.gif
+<repo>/build/one/package/GrafX2/data/gfx2def.ini
+<repo>/build/one/package/GrafX2/data/fonts

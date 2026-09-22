@@ -1,0 +1,1 @@
+PASS: native parent paths, volume root, getcwd failure, NULL and ordinary paths

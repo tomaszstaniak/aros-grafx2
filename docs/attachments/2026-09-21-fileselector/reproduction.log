@@ -1,0 +1,11 @@
+repro: cloned pinned base f84cb09dc59d706d6e7b28778b01ba911f52298c into <tmp>/aros-grafx2-repro.ef3o4i/repro
+repro: applied 0001-png-stdio-callbacks.patch
+repro: applied 0002-sdl2-software-renderer-aros.patch
+repro: applied 0003-aros-sdl2-filename-input.patch
+repro: applied 0004-aros-stack-nostdiowin.patch
+repro: applied 0005-amiga-quit-elif-key-q.patch
+repro: applied 0006-aros-exclusive-dos-lock.patch
+repro: applied 0007-aros-renderer-no-sticky-hint.patch
+repro: applied 0008-aros-fileselector-parent-null.patch
+repro: applied 0009-aros-absolute-parent-directory.patch
+repro: PASS — series of 9 patch(es) applies cleanly to the pinned base

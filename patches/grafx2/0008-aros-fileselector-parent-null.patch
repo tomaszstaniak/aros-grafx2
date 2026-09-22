@@ -1,0 +1,178 @@
+Title: 0008-aros-fileselector-parent-null
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0007-aros-renderer-no-sticky-hint.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS and other Amiga-family targets where PARENT_DIR is /. NULL-safe strdup is generic; the / mapping is Amiga-only.
+
+Problem:
+  Load/Save fileselector: PARENT_DIR is / on AROS, POSIX chdir(/) fails, then a NULL filename is stolen and the next scroll does strdup(NULL) which AROS strlen treats as illegal address 0x80000003. Same crash after clicking the name field on a directory (filename is NULLed on purpose).
+Solution:
+  Map Amiga parent / to chdir(..) on AROS/Amiga. Reject NULL Change_directory. Do not strdup or strcmp a NULL filename in Scroll_fileselector and the other Load/Save strdup sites; skip empty chdir and restore a list item instead of stealing NULL.
+Validation:
+  2026-09-21: ABIv11 build and QEMU one regression. See docs/attachments/2026-09-21-fileselector/REPORT.md.
+  Patch 0008 alone stops the NULL crash; parent navigation requires patch 0009.
+Removal:
+  Keep until equivalent upstream fixes replace the guarded selection and AROS parent-path handling.
+
+diff --git a/src/filesel.c b/src/filesel.c
+index 83921625..defb4030 100644
+--- a/src/filesel.c
++++ b/src/filesel.c
+@@ -884,6 +884,8 @@ static void Get_selected_item(T_Fileselector *list, T_Selector_settings * select
+     // On commence par chercher à pointer sur le premier fichier visible:
+     // Ensuite, on saute autant d'éléments que le décalage demandé:
+     current_item = Get_item_by_index(list, selector->Position + selector->Offset);
++    if (current_item == NULL || current_item->Full_name == NULL)
++      return;
+ 
+     // On recopie la chaîne
+     free(selector->filename);
+@@ -1257,7 +1259,10 @@ static void Reload_list_of_files(byte filter, T_Scroller_button * button)
+ 
+ void Scroll_fileselector(T_Scroller_button * file_scroller)
+ {
+-  char * old_filename = strdup(Selector->filename);
++  /* filename is NULL after clicking the name field on a directory, and
++   * after a failed chdir stole a NULL save buffer. strdup/strcmp NULL
++   * is illegal on AROS (strlen in stdlib.library). */
++  char * old_filename = Selector->filename != NULL ? strdup(Selector->filename) : NULL;
+ 
+   // On regarde si la liste a bougé
+   if (file_scroller->Position!=Selector->Position)
+@@ -1268,7 +1273,9 @@ void Scroll_fileselector(T_Scroller_button * file_scroller)
+   }
+   // On récupére le nom du schmilblick à "accéder"
+   Get_selected_item(&Filelist, Selector, &Selected_type);
+-  if (strcmp(old_filename, Selector->filename))
++  if ((old_filename == NULL) != (Selector->filename == NULL)
++      || (old_filename != NULL && Selector->filename != NULL
++          && strcmp(old_filename, Selector->filename) != 0))
+     New_preview_is_needed=1;
+   free(old_filename);
+ 
+@@ -1819,7 +1826,7 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+               }
+             }
+           }
+-          savename = strdup(Selector->filename);
++          savename = Selector->filename != NULL ? strdup(Selector->filename) : NULL;
+           Selector_filename_unicode_save = Unicode_strdup(Selector->filename_unicode);
+           // By default, position list at the beginning
+           Selector->Position = 0;
+@@ -1870,14 +1877,16 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+         word * save_filename_unicode = Unicode_strdup(Selector->filename_unicode);
+ 
+         free(save_filename);
+-        save_filename = strdup(Selector->filename);
++        save_filename = Selector->filename != NULL ? strdup(Selector->filename) : NULL;
+         // Check if the selected entry is a drive/directory :
+         // in, this case, clear the filename
+         if (Filelist.Nb_elements>0)
+         {
+           T_Fileselector_item * current_item;
+           current_item = Get_item_by_index(&Filelist, Selector->Position + Selector->Offset);
+-          if (current_item->Type != FSOBJECT_FILE && !FILENAME_COMPARE(current_item->Full_name, Selector->filename))
++          if (current_item != NULL && current_item->Type != FSOBJECT_FILE
++              && Selector->filename != NULL
++              && !FILENAME_COMPARE(current_item->Full_name, Selector->filename))
+           {
+             // current name is a highlighted directory
+             free(Selector->filename);
+@@ -2037,7 +2046,7 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+                   GFX2_Log(GFX2_DEBUG,"Go to bookmark %s\n", Config.Bookmark_directory[clicked_button-10]);
+                   // backup the currently selected filename
+                   free(save_filename);
+-                  save_filename = strdup(Selector->filename);
++                  save_filename = Selector->filename != NULL ? strdup(Selector->filename) : NULL;
+                   // simulate a click on the bookmarked directory
+                   directory_to_change_to = Config.Bookmark_directory[clicked_button-10];
+                   Reset_quicksearch();
+@@ -2241,10 +2250,12 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+ 
+         if (directory_to_change_to == NULL)
+           directory_to_change_to = Selector->filename;
+-
+-        // We must enter the directory
+-      
+-        if (directory_to_change_to[0] == '.' &&
++        if (directory_to_change_to == NULL || directory_to_change_to[0] == '\0')
++        {
++          directory_to_change_to = NULL;
++          Display_cursor();
++        }
++        else if (directory_to_change_to[0] == '.' &&
+             (directory_to_change_to[1] == '\0' || directory_to_change_to[1] == '/' || directory_to_change_to[1] == '\\' ||
+             (directory_to_change_to[1] == '.' &&
+              (directory_to_change_to[2] == '/' || directory_to_change_to[2] == '\\')))) // Relative path
+@@ -2254,7 +2265,7 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+           Change_directory(Data_directory);
+         }
+ 
+-        if (Change_directory(directory_to_change_to) == 0)
++        if (directory_to_change_to != NULL && Change_directory(directory_to_change_to) == 0)
+         {
+           short pos;
+           char * previous_directory; // Directory when we are coming from
+@@ -2295,7 +2306,7 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+           // New directory, so we need to reset the quicksearch
+           Reset_quicksearch();
+         }
+-        else
++        else if (directory_to_change_to != NULL)
+         {
+           char * current_dir;
+           Display_cursor();
+@@ -2309,8 +2320,17 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+           free(current_dir);
+           // restore Selector_filename
+           free(Selector->filename);
+-          Selector->filename = save_filename; // steal heap buffer
+-          save_filename = NULL;
++          if (save_filename != NULL)
++          {
++            Selector->filename = save_filename; // steal heap buffer
++            save_filename = NULL;
++          }
++          else
++          {
++            Selector->filename = NULL;
++            if (Filelist.Nb_elements > 0)
++              Get_selected_item(&Filelist, Selector, &Selected_type);
++          }
+ #if !defined (__amigaos__)
+           Error(0);
+ #endif
+@@ -2448,7 +2468,7 @@ byte Button_Load_or_Save(T_Selector_settings *settings, byte load, T_IO_Context
+     }
+     else
+     {
+-      context->File_name = strdup(Selector->filename);
++      context->File_name = Selector->filename != NULL ? strdup(Selector->filename) : NULL;
+       context->File_name_unicode = Unicode_strdup(Selector->filename_unicode);
+       free(context->File_directory);
+       context->File_directory = strdup(Selector->Directory);
+diff --git a/src/io.c b/src/io.c
+index e4f1be8e..feecdcf8 100644
+--- a/src/io.c
++++ b/src/io.c
+@@ -1147,9 +1147,17 @@ char * Get_current_directory(char * buf, word * * unicode, size_t size)
+ 
+ int Change_directory(const char * path)
+ {
++  if (path == NULL)
++    return -1;
+   GFX2_Log(GFX2_DEBUG, "Change_directory(\"%s\")\n", path);
+ #if defined(__WIN32__) || defined(WIN32)
+   return (SetCurrentDirectoryA(path) ? 0 : -1);
++#elif defined(__AROS__) || defined(__MORPHOS__) || defined(__amigaos4__) || defined(__amigaos__)
++  /* PARENT_DIR is "/" on these systems (Amiga "cd /"). POSIX chdir("/") is
++   * the unix root and fails; map the parent entry to "..". */
++  if (path[0] == '/' && path[1] == '\0')
++    return chdir("..");
++  return chdir(path);
+ #else
+   return chdir(path);
+ #endif

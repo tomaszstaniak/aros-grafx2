@@ -1,0 +1,139 @@
+Title: 0002-sdl2-software-renderer-aros
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0001-png-stdio-callbacks.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS software preference; NULL guards are generic SDL2.
+
+Problem:
+  First ABIv11 run crashed in stdlib memremove during GFX2_UpdateRect (SDL_LockTexture path) after SDL_CreateRenderer ACCELERATED|VSYNC succeeded. No NULL checks.
+Solution:
+  On AROS, create a software renderer first (GrafX2 already paints in software). Keep a generic accelerated-then-software fallback elsewhere. Guard NULL window/renderer/texture/surface before update.
+Validation:
+  2026-09-20 AROS One x86_64 ABIv11 under QEMU: after this patch GrafX2 2.9
+  opened with skins and no memremove requester. Evidence:
+  docs/attachments/2026-09-20-abiv11-launch/retry-software.png.
+  Patch 0007 later drops the sticky software hint around the accelerated
+  fallback; that path has not been shown to work on AROS.
+Removal:
+  Keep the AROS software-first CreateRenderer until an accelerated renderer
+  survives GFX2_UpdateRect. NULL guards are generic.
+
+diff --git a/src/sdlscreen.c b/src/sdlscreen.c
+index 8acf20a1..64cf618a 100644
+--- a/src/sdlscreen.c
++++ b/src/sdlscreen.c
+@@ -120,6 +120,35 @@ void Screen_FillRect(int x, int y, int w, int h, byte color)
+ #if defined(USE_SDL2)
+ // used in GFX2_Set_mode() and GFX2_UpdateScreen()
+ static SDL_Rect render_dstrect;
++
++/// Prefer an accelerated vsync renderer; fall back to software.
++/// AROS SDL2 has previously returned a renderer that then crashes in
++/// texture upload (GFX2_UpdateRect -> memremove). Software is enough:
++/// GrafX2 already draws into its own 8-bit surface.
++static SDL_Renderer *GFX2_CreateRenderer(SDL_Window *window)
++{
++  SDL_Renderer *renderer;
++
++#if defined(__AROS__)
++  // AROS SDL2 can return a non-NULL accelerated renderer that then dies in
++  // SDL_LockTexture / stdlib memremove on the first GFX2_UpdateRect.
++  // GrafX2 already renders in software; present through SDL's software path.
++  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
++  renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
++  if (renderer != NULL)
++    return renderer;
++  GFX2_Log(GFX2_WARNING, "software SDL renderer failed (%s), trying default\n", SDL_GetError());
++#endif
++  renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
++  if (renderer != NULL)
++    return renderer;
++  GFX2_Log(GFX2_WARNING, "accelerated SDL renderer failed (%s), trying software\n", SDL_GetError());
++  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
++  renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
++  if (renderer == NULL)
++    GFX2_Log(GFX2_ERROR, "software SDL renderer failed: %s\n", SDL_GetError());
++  return renderer;
++}
+ #endif
+ 
+ /// Sets the new screen/window dimensions.
+@@ -157,8 +186,15 @@ void GFX2_Set_mode(int *width, int *height, int fullscreen)
+                                   Config.Window_pos_x != 9999 ? Config.Window_pos_x : (int)SDL_WINDOWPOS_UNDEFINED,
+                                   Config.Window_pos_y != 9999 ? Config.Window_pos_y : (int)SDL_WINDOWPOS_UNDEFINED,
+                                   *width, *height, (fullscreen?SDL_WINDOW_FULLSCREEN:SDL_WINDOW_RESIZABLE));
++    if (Window_SDL == NULL)
++    {
++      GFX2_Log(GFX2_ERROR, "SDL_CreateWindow failed: %s\n", SDL_GetError());
++      return;
++    }
+     SDL_SetWindowIcon(Window_SDL, icon);
+-    Renderer_SDL = SDL_CreateRenderer(Window_SDL, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
++    Renderer_SDL = GFX2_CreateRenderer(Window_SDL);
++    if (Renderer_SDL == NULL)
++      return;
+     SDL_SetRenderDrawColor(Renderer_SDL, 0, 0, 0, SDL_ALPHA_OPAQUE);
+   }
+   else
+@@ -167,10 +203,17 @@ void GFX2_Set_mode(int *width, int *height, int fullscreen)
+     SDL_SetWindowFullscreen(Window_SDL, fullscreen?SDL_WINDOW_FULLSCREEN:0);
+   }
+   //SDL_GetWindowSize(Window_SDL, width, height);
++  if (Renderer_SDL == NULL)
++    return;
+   if (Texture_SDL != NULL)
+     SDL_DestroyTexture(Texture_SDL);
+   Texture_SDL = SDL_CreateTexture(Renderer_SDL, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                                   Screen_width * Pixel_width, Screen_height * Pixel_height);
++  if (Texture_SDL == NULL)
++  {
++    GFX2_Log(GFX2_ERROR, "SDL_CreateTexture failed: %s\n", SDL_GetError());
++    return;
++  }
+   SDL_SetTextureScaleMode(Texture_SDL, SDL_ScaleModeNearest);
+   render_dstrect.x = 0;
+   render_dstrect.y = 0;
+@@ -208,6 +251,9 @@ static void GFX2_UpdateRect(int x, int y, int width, int height)
+   static SDL_Surface *RGBcopy = NULL;
+   SDL_Rect source_rect;
+ 
++  if (Screen_SDL == NULL || Texture_SDL == NULL)
++    return;
++
+   source_rect.x = x;
+   source_rect.y = y;
+   if (width == 0 && height == 0) {
+@@ -229,11 +275,20 @@ static void GFX2_UpdateRect(int x, int y, int width, int height)
+     RGBcopy = SDL_CreateRGBSurface(0,
+     Screen_SDL->w, Screen_SDL->h,
+     32, 0, 0, 0, 0);
++    if (RGBcopy == NULL)
++    {
++      GFX2_Log(GFX2_ERROR, "SDL_CreateRGBSurface failed: %s\n", SDL_GetError());
++      return;
++    }
+   }
+   // conversion ARGB
+   SDL_BlitSurface(Screen_SDL, &source_rect, RGBcopy, &source_rect);
+   // upload texture
+-  SDL_LockTexture(Texture_SDL, &source_rect, (void **)(&pixels), &pitch );
++  if (SDL_LockTexture(Texture_SDL, &source_rect, (void **)(&pixels), &pitch ) != 0)
++  {
++    GFX2_Log(GFX2_ERROR, "SDL_LockTexture failed: %s\n", SDL_GetError());
++    return;
++  }
+   for (line = 0; line < source_rect.h; line++)
+   {
+      memcpy(pixels + line * pitch, (const byte *)RGBcopy->pixels + source_rect.x * 4 + (source_rect.y+line)* RGBcopy->pitch, source_rect.w * 4 );
+@@ -243,6 +298,8 @@ static void GFX2_UpdateRect(int x, int y, int width, int height)
+ 
+ void GFX2_UpdateScreen(void)
+ {
++  if (Renderer_SDL == NULL || Texture_SDL == NULL)
++    return;
+   SDL_RenderClear(Renderer_SDL);
+   SDL_RenderCopy(Renderer_SDL, Texture_SDL, NULL, &render_dstrect);
+   SDL_RenderPresent(Renderer_SDL);

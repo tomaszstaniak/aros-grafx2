@@ -1,0 +1,17 @@
+stage: <tmp>/aros-grafx2-package.4t4pPc/GrafX2
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/Licenses
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/Licenses/gpl-2.0.txt
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/Licenses/COPYRIGHT.txt
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/GrafX2
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/ReadMe.txt
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/GrafX2.info
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data/skins
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data/gfx2.png
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data/scripts
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data/gfx2.gif
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data/gfx2def.ini
+<tmp>/aros-grafx2-package.4t4pPc/GrafX2/data/fonts
+-rw-r--r--@ 1 user  staff  4203804 Sep 21 15:22 <repo>/build/one/grafx2.x86_64-aros-v11.lha
+package: <repo>/build/one/grafx2.x86_64-aros-v11.lha

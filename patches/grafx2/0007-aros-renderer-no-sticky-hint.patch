@@ -1,0 +1,41 @@
+Title: 0007-aros-renderer-no-sticky-hint
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0006-aros-exclusive-dos-lock.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS SDL2 renderer creation.
+
+Problem:
+  The AROS software-renderer path set SDL_HINT_RENDER_DRIVER to software before CreateRenderer. That hint would still be set if software creation failed, so the declared accelerated fallback could not actually run.
+Solution:
+  Create the software renderer with SDL_RENDERER_SOFTWARE only, without the sticky hint, so a failed software create can still try accelerated.
+Validation:
+  2026-09-20 AROS One x86_64 ABIv11 under QEMU: GrafX2 2.9 opened
+  with skins after this patch (software CreateRenderer succeeded). The
+  accelerated fallback was not reached. Evidence:
+  docs/attachments/2026-09-20-lock-ilbm/instance-a.png.
+Removal:
+  Keep the unsticky software-first CreateRenderer until an accelerated
+  renderer survives GFX2_UpdateRect.
+
+diff --git a/src/sdlscreen.c b/src/sdlscreen.c
+index 64cf618a..2baf3fb4 100644
+--- a/src/sdlscreen.c
++++ b/src/sdlscreen.c
+@@ -133,11 +133,12 @@ static SDL_Renderer *GFX2_CreateRenderer(SDL_Window *window)
+   // AROS SDL2 can return a non-NULL accelerated renderer that then dies in
+   // SDL_LockTexture / stdlib memremove on the first GFX2_UpdateRect.
+   // GrafX2 already renders in software; present through SDL's software path.
+-  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
++  // Do not set SDL_HINT_RENDER_DRIVER: it would stick and block the
++  // accelerated attempt below if software creation failed.
+   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+   if (renderer != NULL)
+     return renderer;
+-  GFX2_Log(GFX2_WARNING, "software SDL renderer failed (%s), trying default\n", SDL_GetError());
++  GFX2_Log(GFX2_WARNING, "software SDL renderer failed (%s), trying accelerated\n", SDL_GetError());
+ #endif
+   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+   if (renderer != NULL)

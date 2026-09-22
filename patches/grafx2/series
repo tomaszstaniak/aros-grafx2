@@ -1,0 +1,11 @@
+# One filename per line after this comment.
+0001-png-stdio-callbacks.patch
+0002-sdl2-software-renderer-aros.patch
+0003-aros-sdl2-filename-input.patch
+0004-aros-stack-nostdiowin.patch
+0005-amiga-quit-elif-key-q.patch
+0006-aros-exclusive-dos-lock.patch
+0007-aros-renderer-no-sticky-hint.patch
+0008-aros-fileselector-parent-null.patch
+0009-aros-absolute-parent-directory.patch
+0010-sdl2-keysym-to-ansi-no-character.patch

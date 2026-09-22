@@ -1,0 +1,138 @@
+Title: 0003-aros-sdl2-filename-input
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0002-sdl2-software-renderer-aros.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS SDL2 for capture/poll/KEYDOWN fallback; StartTextInput is generic SDL2.
+
+Problem:
+  Clicking the save-dialog filename field on AROS SDL2 locked GrafX2: no keys, cursor stuck. Readline waits for mouse-up then inserts printables only from SDL_TEXTINPUT; AROS SDL2 may not emit TEXTINPUT, and SDL_CaptureMouse can leave BUTTONUP undelivered so Wait_end_of_click never returns.
+Solution:
+  On AROS, skip SDL_CaptureMouse, poll SDL_GetMouseState for buttons after each event batch, and insert KEYDOWN characters when Key_Text is empty. Pair SDL_StartTextInput/StopTextInput around Readline on all SDL2 builds.
+Validation:
+  2026-09-20, AROS One x86_64 ABIv11 under QEMU.
+  F2 Save picture, click filename, type hello: field became NO_NAME.helloGIF
+  (filename-typed2.png). Esc restored NO_NAME.GIF. No freeze.
+Removal:
+  AROS CaptureMouse skip and GetMouseState poll are workarounds for that SDL2
+  backend. StartTextInput and the Key_ANSI fallback can stay if AROS never
+  emits SDL_TEXTINPUT.
+
+diff --git a/src/input.c b/src/input.c
+index d52c4fef..944165b9 100644
+--- a/src/input.c
++++ b/src/input.c
+@@ -1502,6 +1502,34 @@ static void Mouse_Emulation()
+ static Uint32 next_mouse_motion_ticks = 0;
+ #endif
+ 
++#if defined(__AROS__) && defined(USE_SDL2)
++/// AROS SDL2 has previously delivered mouse button events with (0,0)
++/// coordinates, and SDL_CaptureMouse can leave BUTTONUP undelivered so
++/// Wait_end_of_click never returns. Reconcile with the physical buttons
++/// after the event batch (the verified AROS workaround is polling
++/// SDL_GetMouseState).
++static void AROS_Poll_mouse_buttons(int *user_feedback_required)
++{
++  int mx;
++  int my;
++  int new_k = 0;
++  Uint32 buttons = SDL_GetMouseState(&mx, &my);
++
++  (void)mx;
++  (void)my;
++  if (buttons & SDL_BUTTON(SDL_BUTTON_LEFT))
++    new_k |= Button_inverter ? 2 : 1;
++  if (buttons & SDL_BUTTON(SDL_BUTTON_RIGHT))
++    new_k |= Button_inverter ? 1 : 2;
++  if (new_k != Input_new_mouse_K)
++  {
++    Input_new_mouse_K = new_k;
++    if (Handle_mouse_btn_change())
++      *user_feedback_required = 1;
++  }
++}
++#endif
++
+ // Main input handling function
+ 
+ int Get_input(int sleep_time)
+@@ -1667,8 +1695,10 @@ int Get_input(int sleep_time)
+               break;
+ 
+           case SDL_MOUSEBUTTONDOWN:
+-#if defined(USE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 4)
++#if defined(USE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 4) && !defined(__AROS__)
+               // SDL_CaptureMouse() is available since SDL 2.0.4.
++              // Skip on AROS: capture has left BUTTONUP undelivered, so
++              // Wait_end_of_click (filename field, tools) never returns.
+               SDL_CaptureMouse(SDL_TRUE);
+ #elif defined(USE_SDL)
+               SDL_WM_GrabInput(SDL_GRAB_ON);
+@@ -1678,7 +1708,7 @@ int Get_input(int sleep_time)
+               break;
+ 
+           case SDL_MOUSEBUTTONUP:
+-#if defined(USE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 4)
++#if defined(USE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 4) && !defined(__AROS__)
+               // SDL_CaptureMouse() is available since SDL 2.0.4.
+               SDL_CaptureMouse(SDL_FALSE);
+ #elif defined(USE_SDL)
+@@ -1923,6 +1953,10 @@ int Get_input(int sleep_time)
+ 
+     Mouse_Emulation();
+ 
++#if defined(__AROS__) && defined(USE_SDL2)
++    AROS_Poll_mouse_buttons(&user_feedback_required);
++#endif
++
+     // If the cursor was moved since last update,
+     // it was erased, so we need to redraw it (with the preview brush)
+     if (Mouse_moved)
+diff --git a/src/readline.c b/src/readline.c
+index 8c815cd4..5c09e553 100644
+--- a/src/readline.c
++++ b/src/readline.c
+@@ -515,6 +515,12 @@ byte Readline_ex_unicode(word x_pos, word y_pos, char * str, word * str_unicode,
+   Keyboard_click_allowed = 0;
+ #endif
+   Hide_cursor();
++#if defined(USE_SDL2)
++  // SDL2 inserts printable characters from SDL_TEXTINPUT (Key_Text), not
++  // from KEYDOWN. Text input is enabled by default on desktop, but AROS
++  // SDL2 may still need this, and pairing Start/Stop is the documented API.
++  SDL_StartTextInput();
++#endif
+ 
+   // Mise à jour des variables se rapportant à la chaîne en fonction de la chaîne initiale
+   strcpy(initial_string,str);
+@@ -897,9 +903,15 @@ byte Readline_ex_unicode(word x_pos, word y_pos, char * str, word * str_unicode,
+         break;
+       default :
+         // SDL2 keystrokes are reported through both Key_Text and
+-        // Key_ANSI / Key_UNICODE
++        // Key_ANSI / Key_UNICODE. AROS SDL2 has not been observed to emit
++        // SDL_TEXTINPUT, so KEYDOWN (Key_ANSI) is the only path; skip it
++        // when Key_Text already holds this character to avoid doubling.
+ #if defined(USE_SDL2)
+-        if (use_virtual_keyboard && size<max_size && input_char != 0)
++        if ((use_virtual_keyboard
++#if defined(__AROS__)
++             || Key_Text[0] == '\0'
++#endif
++            ) && size<max_size && input_char != 0)
+ #else
+         if (size<max_size && input_char != 0)
+ #endif
+@@ -980,6 +992,9 @@ affichage:
+     Mouse_K=old_mouse_k;
+     Input_sticky_control=0;
+   }
++#if defined(USE_SDL2)
++  SDL_StopTextInput();
++#endif
+ #endif // defined(__ANDROID__)
+   // Effacement de la chaîne
+   Screen_FillRect((window_x+(x_pos*Menu_factor_X))*Pixel_width, (window_y+(y_pos*Menu_factor_Y))*Pixel_height,

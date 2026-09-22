@@ -1,0 +1,39 @@
+Title: 0004-aros-stack-nostdiowin
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0003-aros-sdl2-filename-input.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS CRT symbols only.
+
+Problem:
+  Workbench default stack is far too small for this SDL2 binary; a Shell launch needed 8 MiB, and a CLI/WB start without that would fail. AROS also opens an extra console for GUI programs unless suppressed.
+Solution:
+  Set AROS CRT __stack to 8 MiB (8*1024*1024) and __nostdiowin=1 so CLI and Workbench launches get that stack without a prior stack command and without a spare console.
+Validation:
+  2026-09-20 AROS One x86_64 ABIv11 under QEMU: Run SYS:GrafX2/GrafX2
+  without a prior stack command opened GrafX2 2.9. The 9,950,048-byte binary
+  stores __stack = 0x00800000 (8,388,608) in .data. nm shows the symbol's
+  section offset, not that integer. Evidence:
+  docs/attachments/2026-09-20-lock-ilbm/instance-a.png.
+Removal:
+  __stack and __nostdiowin are AROS CRT symbols; keep them.
+
+diff --git a/src/osdep.c b/src/osdep.c
+index 8f1c87fc..802c84b1 100644
+--- a/src/osdep.c
++++ b/src/osdep.c
+@@ -76,6 +76,12 @@ const char * get_paste_board(void);
+ #define strdup _strdup
+ #endif
+ 
++#if defined(__AROS__)
++/* Workbench default stack is far too small; the Shell run needed 8 MiB. */
++unsigned long __stack = 8UL * 1024UL * 1024UL;
++int __nostdiowin = 1;
++#endif
++
+ #include "struct.h"
+ #include "input.h"
+ #include "screen.h"

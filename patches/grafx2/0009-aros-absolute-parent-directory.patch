@@ -1,0 +1,63 @@
+Title: 0009-aros-absolute-parent-directory
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0008-aros-fileselector-parent-null.patch
+Author: aros-grafx2 project
+Date: 2026-09-21
+Upstream-Status: candidate
+Scope: AROS Change_directory parent navigation only; other Amiga-family platforms retain upstream behavior.
+
+Problem:
+  The unshipped 0008 patch avoids the NULL crash but chdir("..") still fails from AROS:Burntime on ABIv11.
+Solution:
+  Resolve the native absolute parent from getcwd, preserve volume roots, and use chdir to retain CRT lock ownership. Keep this workaround AROS-only.
+Validation:
+  2026-09-21: ABIv11 build and QEMU one regression. See docs/attachments/2026-09-21-fileselector/REPORT.md.
+  Patch 0008 alone stops the NULL crash; parent navigation requires patch 0009.
+Removal:
+  Keep until equivalent upstream fixes replace the guarded selection and AROS parent-path handling.
+
+diff --git a/src/io.c b/src/io.c
+index feecdcf8..2c3aaa14 100644
+--- a/src/io.c
++++ b/src/io.c
+@@ -1152,11 +1152,35 @@ int Change_directory(const char * path)
+   GFX2_Log(GFX2_DEBUG, "Change_directory(\"%s\")\n", path);
+ #if defined(__WIN32__) || defined(WIN32)
+   return (SetCurrentDirectoryA(path) ? 0 : -1);
+-#elif defined(__AROS__) || defined(__MORPHOS__) || defined(__amigaos4__) || defined(__amigaos__)
+-  /* PARENT_DIR is "/" on these systems (Amiga "cd /"). POSIX chdir("/") is
+-   * the unix root and fails; map the parent entry to "..". */
++#elif defined(__AROS__)
++  /* The ABIv11 runtime rejects both "/" and ".." as a parent here.
++   * getcwd returns a native volume:path; give chdir its absolute parent
++   * and keep volume roots unchanged. Do not alter process locks directly:
++   * the C runtime owns their lifetime and restores the original on exit. */
+   if (path[0] == '/' && path[1] == '\0')
+-    return chdir("..");
++  {
++    char * current = getcwd(NULL, 0);
++    char * separator;
++    int result;
++    if (current == NULL)
++      return -1;
++    separator = strrchr(current, '/');
++    if (separator != NULL)
++      *separator = '\0';
++    else
++    {
++      separator = strrchr(current, ':');
++      if (separator == NULL)
++      {
++        free(current);
++        return -1;
++      }
++      separator[1] = '\0';
++    }
++    result = chdir(current);
++    free(current);
++    return result;
++  }
+   return chdir(path);
+ #else
+   return chdir(path);

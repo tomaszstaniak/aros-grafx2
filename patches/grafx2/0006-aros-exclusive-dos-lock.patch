@@ -1,0 +1,104 @@
+Title: 0006-aros-exclusive-dos-lock
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0005-amiga-quit-elif-key-q.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS. Native Lock() exclusive, auto-released if the process dies.
+
+Problem:
+  posixc has no lockf and fcntl F_SETLK returns EINVAL, so AROS only open()ed gfx2.lck. Every instance then enabled Safety_backup_active and deleted the sentinel on exit, so two copies could rotate and erase the same backups.
+Solution:
+  Create an empty persistent gfx2.lck, close that fd, and hold dos.library Lock(EXCLUSIVE_LOCK) for the process. Fail Create_lock_file if Lock fails. UnLock on exit; do not delete the sentinel.
+Validation:
+  2026-09-20 AROS One x86_64 ABIv11 under QEMU, SYS:GrafX2 not vvfat.
+  A acquired the lock (About splash). B showed the existing "other instances
+  are running" Warning and backups off. After B quit, C still got the Warning.
+  After A quit, gfx2.lck remained; D acquired the lock (About splash). Evidence:
+  docs/attachments/2026-09-20-lock-ilbm/REPORT.md.
+Removal:
+  Keep while posixc has no lockf/F_SETLK. Native Lock() is the AROS exclusive.
+
+diff --git a/src/io.c b/src/io.c
+index 074445b1..e4f1be8e 100644
+--- a/src/io.c
++++ b/src/io.c
+@@ -39,6 +39,9 @@
+ 
+ #if defined(__amigaos4__) || defined(__AROS__) || defined(__MORPHOS__) || defined(__amigaos__)
+     #include <proto/dos.h>
++#if defined(__AROS__)
++    #include <dos/dos.h>
++#endif
+     #include <sys/types.h>
+     #include <dirent.h>
+ #elif defined(WIN32)
+@@ -883,6 +886,8 @@ word * Get_Unicode_Filename(word * filename_unicode, const char * filename, cons
+ /// Lock file used to prevent several instances of grafx2 from harming each others' backups
+ #ifdef WIN32
+ HANDLE Lock_file_handle = INVALID_HANDLE_VALUE;
++#elif defined(__AROS__)
++static BPTR AROS_instance_lock = BNULL;
+ #else
+ int Lock_file_handle = -1;
+ #endif
+@@ -891,10 +896,32 @@ int Lock_file_handle = -1;
+ 
+ byte Create_lock_file(const char *file_directory)
+ {
+-  #if defined (__amigaos__)||(__AROS__)||(__ANDROID__)
++  #if (defined(__amigaos__) && !defined(__AROS__)) || defined(__ANDROID__)
+     #warning "Missing code for your platform, please check and correct!"
+   #elif defined(__SWITCH__)
+     // The switch can only run one application at a time, so we don't do anything special here
++  #elif defined(__AROS__)
++  {
++    char *lock_filename;
++    int fd;
++
++    /* posixc has no lockf/F_SETLK, and LockRecord depends on the filesystem.
++       Keep an empty sentinel and hold dos.library Lock(EXCLUSIVE_LOCK). */
++    lock_filename = Filepath_append_to_dir(file_directory, GFX2_LOCK_FILENAME);
++    if (lock_filename == NULL)
++      return -1;
++    fd = open(lock_filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
++    if (fd == -1)
++    {
++      free(lock_filename);
++      return -1;
++    }
++    close(fd);
++    AROS_instance_lock = Lock(lock_filename, EXCLUSIVE_LOCK);
++    free(lock_filename);
++    if (AROS_instance_lock == BNULL)
++      return -1;
++  }
+   #else
+   char * lock_filename;
+   
+@@ -941,6 +968,16 @@ byte Create_lock_file(const char *file_directory)
+ 
+ void Release_lock_file(const char *file_directory)
+ {
++#if defined(__AROS__)
++  (void)file_directory;
++  if (AROS_instance_lock != BNULL)
++  {
++    UnLock(AROS_instance_lock);
++    AROS_instance_lock = BNULL;
++  }
++  /* Leave gfx2.lck in place so UnLock/delete/acquire cannot race. */
++  return;
++#else
+   char * lock_filename;
+     
+   #ifdef WIN32
+@@ -964,6 +1001,7 @@ void Release_lock_file(const char *file_directory)
+ #endif
+   Remove_path(lock_filename);
+   free(lock_filename);
++#endif
+ }
+ 
+ char * Get_current_directory(char * buf, word * * unicode, size_t size)

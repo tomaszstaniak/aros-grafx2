@@ -1,0 +1,36 @@
+Title: 0005-amiga-quit-elif-key-q
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0004-aros-stack-nostdiowin.patch
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: Amiga-family (AROS, AmigaOS, MorphOS). Not AROS-specific.
+
+Problem:
+  hotkeys.c used #eif and KEY_Q, so the Amiga-family secondary quit shortcut never compiled in. gcc 10 ignored the unknown directive; fixing only #eif exposes undeclared KEY_Q.
+Solution:
+  Use #elif and KEY_q (the only defined q keycode) for Right-Amiga+Q.
+Validation:
+  2026-09-20 AROS One x86_64 ABIv11 under QEMU: Right-Amiga+Q opened
+  the Quit ? requester on instances C, A and D; Discard quit them. Evidence:
+  docs/attachments/2026-09-20-lock-ilbm/instance-c-amigaq.png,
+  instance-a-quit.png.
+Removal:
+  #elif/KEY_q is the real upstream spelling; keep it.
+
+diff --git a/src/hotkeys.c b/src/hotkeys.c
+index 9b5dc414..3b754859 100644
+--- a/src/hotkeys.c
++++ b/src/hotkeys.c
+@@ -1026,8 +1026,8 @@ T_Key_config ConfigKey[NB_SHORTCUTS] = {
+     (KEY_JOYBUTTON+JOY_BUTTON_HOME)
+   #elif defined (__WIZ__)
+     (KEY_JOYBUTTON+JOY_BUTTON_MENU)
+-  #eif defined(__amigaos4__) || defined(__AROS__) || defined(__MORPHOS__) || defined(__amigaos__)
+-  KEY_Q|GFX2_MOD_META // Right-Amiga + Q
++  #elif defined(__amigaos4__) || defined(__AROS__) || defined(__MORPHOS__) || defined(__amigaos__)
++  KEY_q|GFX2_MOD_META // Right-Amiga + Q
+   #else
+   0
+   #endif

@@ -1,0 +1,79 @@
+Title: 0001-png-stdio-callbacks
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: none
+Author: aros-grafx2 project
+Date: 2026-09-20
+Upstream-Status: candidate
+Scope: AROS x86_64; also valid anywhere libpng is built without stdio.
+
+Problem:
+  SDK libpng_nostdio has no png_init_io; linking GrafX2 PNG load/save against the real static png objects failed with undefined png_init_io. Mixing -lpng (jfif/png.library stubs) is unsafe.
+Solution:
+  Use png_set_read_fn/png_set_write_fn with FILE* callbacks, the same I/O path already used for memory buffers and verified for this SDK in AROS-dev libraries.md.
+Validation:
+  2026-09-20 AROS One x86_64 ABIv11 under QEMU: F3 loaded
+  SYS:GrafX2/data/gfx2.png and F2 wrote roundtrip.png on SYS:. Evidence:
+  docs/attachments/2026-09-20-archives/.
+Removal:
+  Permanent for this SDK's libpng_nostdio; keep until libpng stdio exists.
+
+diff --git a/src/pngformat.c b/src/pngformat.c
+index f45e258e..b8162a25 100644
+--- a/src/pngformat.c
++++ b/src/pngformat.c
+@@ -167,6 +167,33 @@ struct PNG_memory_buffer {
+   unsigned long size;
+ };
+ 
++/// read from FILE* (libpng_nostdio has no png_init_io)
++static void PNG_file_read(png_structp png_ptr, png_bytep p, png_size_t count)
++{
++  FILE *file = png_get_io_ptr(png_ptr);
++  if (file == NULL || p == NULL)
++    return;
++  if (!Read_bytes(file, p, count))
++    png_error(png_ptr, "PNG file read error");
++}
++
++/// write to FILE* (libpng_nostdio has no png_init_io)
++static void PNG_file_write(png_structp png_ptr, png_bytep p, png_size_t count)
++{
++  FILE *file = png_get_io_ptr(png_ptr);
++  if (file == NULL || p == NULL)
++    return;
++  if (!Write_bytes(file, p, count))
++    png_error(png_ptr, "PNG file write error");
++}
++
++static void PNG_file_flush(png_structp png_ptr)
++{
++  FILE *file = png_get_io_ptr(png_ptr);
++  if (file != NULL)
++    fflush(file);
++}
++
+ /// read from memory buffer
+ static void PNG_memory_read(png_structp png_ptr, png_bytep p, png_size_t count)
+ {
+@@ -215,9 +242,9 @@ void Load_PNG_Sub(T_IO_Context * context, FILE * file, const char * memory_buffe
+       // in this if(), the else will be executed.
+       if (!setjmp(png_jmpbuf(png_ptr)))
+       {
+-        // to read from memory, I need to use png_set_read_fn() instead of calling png_init_io()
++        // libpng_nostdio has no png_init_io(); FILE* uses png_set_read_fn()
+         if (file != NULL)
+-          png_init_io(png_ptr, file);
++          png_set_read_fn(png_ptr, file, PNG_file_read);
+         else
+         {
+           buffer.buffer = (char *)memory_buffer;
+@@ -620,7 +647,7 @@ void Save_PNG_Sub(T_IO_Context * context, FILE * file, char * * buffer, unsigned
+     if (!setjmp(png_jmpbuf(png_ptr)))
+     {
+       if (file != NULL)
+-        png_init_io(png_ptr, file);
++        png_set_write_fn(png_ptr, file, PNG_file_write, PNG_file_flush);
+       else // to write to memory, use png_set_write_fn() instead of calling png_init_io()
+         png_set_write_fn(png_ptr, &memory_buffer, PNG_memory_write, PNG_memory_flush);
+ 
