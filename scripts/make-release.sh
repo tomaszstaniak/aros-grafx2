@@ -7,6 +7,7 @@
 #   LHA_WRITER=/path/to/lha scripts/make-release.sh
 #       -> dist/GrafX2-<ver>.x86_64-aros-v11.lha   (the AROS package)
 #          dist/GrafX2-<ver>-source.zip            (this repository at HEAD)
+#          dist/GrafX2-<ver>-full-source.zip       (patched upstream tree, work/grafx2)
 #          dist/SHA256SUMS
 #
 # <ver> is "<upstream version>-r<AROS package revision>" from
@@ -42,9 +43,16 @@ git -C "$PROJECT_ROOT" archive --format=tar HEAD | tar -x -C "$OUT/$SRC"
 rm -rf "$OUT/$SRC/docs/attachments"
 ( cd "$OUT" && zip -q -r "$SRC.zip" "$SRC" && rm -rf "$SRC" )
 
-( cd "$OUT" && shasum -a 256 "$NAME.lha" "$SRC.zip" > SHA256SUMS )
+# Corresponding source for the GPL-2 binary: the patched upstream tree as
+# built (work/grafx2 without its .git), so nobody needs bootstrap to read it.
+FULL="GrafX2-$VER-full-source"
+rm -rf "$OUT/$FULL" "$OUT/$FULL.zip"; mkdir -p "$OUT/$FULL"
+git -C "$WORK_DIR" archive --format=tar HEAD | tar -x -C "$OUT/$FULL"
+( cd "$OUT" && zip -q -r "$FULL.zip" "$FULL" && rm -rf "$FULL" )
 
-echo "archives:"; ( cd "$OUT" && ls -l "$NAME.lha" "$SRC.zip" && cat SHA256SUMS )
+( cd "$OUT" && shasum -a 256 "$NAME.lha" "$SRC.zip" "$FULL.zip" > SHA256SUMS )
+
+echo "archives:"; ( cd "$OUT" && ls -l "$NAME.lha" "$SRC.zip" "$FULL.zip" && cat SHA256SUMS )
 echo; echo "publish with:"
 echo "  git tag -a v$VER -m 'GrafX2 $UPSTREAM_VER, AROS package revision $REVISION' && git push origin main v$VER"
-echo "  gh release create v$VER dist/$NAME.lha dist/$SRC.zip dist/SHA256SUMS --title 'GrafX2 $UPSTREAM_VER, AROS package revision $REVISION' --notes-file <notes>"
+echo "  gh release create v$VER dist/$NAME.lha dist/$SRC.zip dist/$FULL.zip dist/SHA256SUMS --title 'GrafX2 $UPSTREAM_VER, AROS package revision $REVISION' --notes-file <notes>"

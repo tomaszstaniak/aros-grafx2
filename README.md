@@ -46,6 +46,17 @@ tests. Upstream GrafX2 is not forked: a pinned clean checkout lives in
 `upstream/grafx2/` and all our source changes live in `patches/grafx2/`
 (see `upstreams.json`).
 
+## Where the code is
+
+Upstream GrafX2 is not copied into this repository. `upstreams.json` pins
+it to one commit and `patches/grafx2/` holds every change this port makes,
+as numbered diffs with a header describing the problem, the fix and how
+it was verified. `scripts/bootstrap.sh` clones the pinned commit and
+applies the series, which gives the exact tree that was built in
+`work/grafx2/`. Each GitHub release also carries
+`GrafX2-<ver>-full-source.zip`, that patched tree ready to read or build,
+as the corresponding source of the binary.
+
 ## Targets
 
 Primary: AROS x86_64 ABIv11 (AROS One 1.3). Secondary: mainline AROS
