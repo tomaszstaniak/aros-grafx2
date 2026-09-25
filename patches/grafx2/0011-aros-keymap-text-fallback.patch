@@ -1,0 +1,136 @@
+Title: 0011-aros-keymap-text-fallback
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0010-sdl2-keysym-to-ansi-no-character.patch
+Author: aros-grafx2 project
+Date: 2026-09-25
+Upstream-Status: candidate
+Scope: AROS SDL2 text fallback only; keyboard shortcuts still use GrafX2 keycodes.
+
+Problem:
+  AROS SDL2 does not emit SDL_TEXTINPUT, so GrafX2 used an unmodified SDLK symbol in text fields. Shifted punctuation, Caps Lock, and keymap-specific Alt/Amiga combinations therefore could not produce their configured characters.
+Solution:
+  Convert supported SDL keysyms and modifiers to an AROS raw-key InputEvent and call keymap.library MapRawKey. The active AROS keymap, rather than a hard-coded US shift table, supplies the text character; ordinary SDL2 platforms keep their existing mapping.
+Validation:
+  2026-09-25: ABIv11 cross-build against the AROS One SDK passed, including
+  the keymap.library inline call. scripts/check-reproduction.sh passed with
+  the complete series of 11 patches. Guest key-input verification not run.
+Removal:
+  Keep while AROS SDL2 does not provide SDL_TEXTINPUT. Remove when that
+  backend provides the active keymap's text itself.
+
+diff --git a/src/keyboard.c b/src/keyboard.c
+index e114d15d..d8bc886c 100644
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -23,6 +23,11 @@
+ #if defined(USE_SDL) || defined(USE_SDL2)
+ #include <SDL.h>
+ #endif
++#if defined(__AROS__) && defined(USE_SDL2)
++#include <devices/inputevent.h>
++#include <devices/rawkeycodes.h>
++#include <proto/keymap.h>
++#endif
+ #include "global.h"
+ #include "keyboard.h"
+ #include "keycodes.h"
+@@ -851,8 +856,98 @@ word Keysym_to_ANSI(SDL_keysym keysym)
+   return keysym.sym;
+ }
+ #elif defined(USE_SDL2)
++#if defined(__AROS__)
++static int AROS_Rawkey_code(SDL_Keycode sym)
++{
++  static const UBYTE letter_codes[26] = {
++    RAWKEY_A, RAWKEY_B, RAWKEY_C, RAWKEY_D, RAWKEY_E, RAWKEY_F, RAWKEY_G,
++    RAWKEY_H, RAWKEY_I, RAWKEY_J, RAWKEY_K, RAWKEY_L, RAWKEY_M, RAWKEY_N,
++    RAWKEY_O, RAWKEY_P, RAWKEY_Q, RAWKEY_R, RAWKEY_S, RAWKEY_T, RAWKEY_U,
++    RAWKEY_V, RAWKEY_W, RAWKEY_X, RAWKEY_Y, RAWKEY_Z
++  };
++
++  if (sym >= SDLK_a && sym <= SDLK_z)
++    return letter_codes[sym - SDLK_a];
++  if (sym >= SDLK_1 && sym <= SDLK_9)
++    return RAWKEY_1 + sym - SDLK_1;
++
++  switch (sym)
++  {
++    case SDLK_0:            return RAWKEY_0;
++    case SDLK_SPACE:        return RAWKEY_SPACE;
++    case SDLK_MINUS:        return RAWKEY_MINUS;
++    case SDLK_EQUALS:       return RAWKEY_EQUAL;
++    case SDLK_LEFTBRACKET:  return RAWKEY_LBRACKET;
++    case SDLK_RIGHTBRACKET: return RAWKEY_RBRACKET;
++    case SDLK_BACKSLASH:    return RAWKEY_BACKSLASH;
++    case SDLK_SEMICOLON:    return RAWKEY_SEMICOLON;
++    case SDLK_QUOTE:        return RAWKEY_QUOTE;
++    case SDLK_BACKQUOTE:    return RAWKEY_TILDE;
++    case SDLK_COMMA:        return RAWKEY_COMMA;
++    case SDLK_PERIOD:       return RAWKEY_PERIOD;
++    case SDLK_SLASH:        return RAWKEY_SLASH;
++    case SDLK_KP_0:         return RAWKEY_KP_0;
++    case SDLK_KP_1:         return RAWKEY_KP_1;
++    case SDLK_KP_2:         return RAWKEY_KP_2;
++    case SDLK_KP_3:         return RAWKEY_KP_3;
++    case SDLK_KP_4:         return RAWKEY_KP_4;
++    case SDLK_KP_5:         return RAWKEY_KP_5;
++    case SDLK_KP_6:         return RAWKEY_KP_6;
++    case SDLK_KP_7:         return RAWKEY_KP_7;
++    case SDLK_KP_8:         return RAWKEY_KP_8;
++    case SDLK_KP_9:         return RAWKEY_KP_9;
++    case SDLK_KP_PERIOD:    return RAWKEY_KP_DECIMAL;
++    case SDLK_KP_DIVIDE:    return RAWKEY_KP_DIVIDE;
++    case SDLK_KP_MULTIPLY:  return RAWKEY_KP_MULTIPLY;
++    case SDLK_KP_MINUS:     return RAWKEY_KP_MINUS;
++    case SDLK_KP_PLUS:      return RAWKEY_KP_PLUS;
++    case SDLK_KP_ENTER:     return RAWKEY_KP_ENTER;
++    default:                return -1;
++  }
++}
++
++static UWORD AROS_Qualifier(SDL_Keymod mod)
++{
++  UWORD qualifier = 0;
++
++  if (mod & KMOD_LSHIFT) qualifier |= IEQUALIFIER_LSHIFT;
++  if (mod & KMOD_RSHIFT) qualifier |= IEQUALIFIER_RSHIFT;
++  if (mod & KMOD_CAPS)   qualifier |= IEQUALIFIER_CAPSLOCK;
++  if (mod & KMOD_LCTRL)  qualifier |= IEQUALIFIER_CONTROL;
++  if (mod & KMOD_RCTRL)  qualifier |= IEQUALIFIER_CONTROL;
++  if (mod & KMOD_LALT)   qualifier |= IEQUALIFIER_LALT;
++  if (mod & KMOD_RALT)   qualifier |= IEQUALIFIER_RALT;
++  if (mod & KMOD_LGUI)   qualifier |= IEQUALIFIER_LCOMMAND;
++  if (mod & KMOD_RGUI)   qualifier |= IEQUALIFIER_RCOMMAND;
++  if (mod & KMOD_NUM)    qualifier |= IEQUALIFIER_NUMERICPAD;
++  return qualifier;
++}
++
++static int AROS_Keysym_to_ANSI(SDL_Keysym keysym, word *ansi)
++{
++  struct InputEvent event = { 0 };
++  UBYTE text[8];
++  int rawkey = AROS_Rawkey_code(keysym.sym);
++  WORD length;
++
++  if (rawkey < 0)
++    return 0;
++  event.ie_Class = IECLASS_RAWKEY;
++  event.ie_Code = rawkey;
++  event.ie_Qualifier = AROS_Qualifier(keysym.mod);
++  length = MapRawKey(&event, (STRPTR)text, sizeof(text), NULL);
++  *ansi = length > 0 ? text[0] : 0;
++  return 1;
++}
++#endif
++
+ word Keysym_to_ANSI(SDL_Keysym keysym)
+ {
++#if defined(__AROS__)
++  word ansi;
++  if (AROS_Keysym_to_ANSI(keysym, &ansi))
++    return ansi;
++#endif
+   if (keysym.sym < 128) {
+     if (keysym.mod & KMOD_SHIFT && keysym.sym >= SDLK_a && keysym.sym <= SDLK_z)
+       return (word)(keysym.sym - 32);  // uppercase letter

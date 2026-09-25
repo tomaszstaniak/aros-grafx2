@@ -9,3 +9,4 @@
 0008-aros-fileselector-parent-null.patch
 0009-aros-absolute-parent-directory.patch
 0010-sdl2-keysym-to-ansi-no-character.patch
+0011-aros-keymap-text-fallback.patch

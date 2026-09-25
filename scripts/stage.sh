@@ -27,8 +27,13 @@ cp "$WORK_DIR/doc/gpl-2.0.txt" "$STAGE/Licenses/gpl-2.0.txt"
 
 cat > "$STAGE/ReadMe.txt" <<'README'
 GrafX2 for AROS x86_64 (ABIv11 / AROS One)
-Version 2.9, AROS package revision 3 (2026-09-22)
+Version 2.9, AROS package revision 4 (2026-09-25)
 GPL-2. See Licenses/. Upstream: https://grafx2.gitlab.io/grafX2/
+
+Revision 4
+  Text fields use the active AROS keymap. Shift, Alt, Caps Lock and
+  Amiga modifiers therefore produce the configured characters, including
+  ^, * and /, rather than only the unmodified SDL2 key symbol.
 
 Revision 3
   Shift, Ctrl, Alt, Amiga, Caps Lock, the function keys and the keypad

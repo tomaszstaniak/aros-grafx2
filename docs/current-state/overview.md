@@ -37,7 +37,7 @@ The staged drawer is `GrafX2/` plus a sibling `GrafX2.info`.
 `scripts/package.sh` writes an AROS Archives LHA
 (`grafx2.x86_64-aros-v11.lha`) of the drawer, the drawer icon, and
 `.arospkg/manifest.toml` (`packaging/manifest.toml`: id `grafx2`,
-upstream `version = "2.9"`, this port's `revision = 3`,
+upstream `version = "2.9"`, this port's `revision = 4`,
 `[install].icon = "GrafX2.info"` at the archive root). The tool icon
 `GrafX2/GrafX2.info` is a different file and stays inside the drawer.
 `[source]` is omitted until there is a corresponding-source archive to
@@ -163,3 +163,13 @@ without a character and AROS SDL2 never emits `SDL_TEXTINPUT`. Patch 0010
 returns the keypad character or 0. Verified on AROS One 1.3 under QEMU;
 host contract test `tests/test-keysym-to-ansi.py`. Details:
 [revision 3 report](../attachments/2026-09-22-keyboard-modifiers/REPORT.md).
+
+## Revision 4 keymap fallback (2026-09-25)
+
+AROS SDL2 does not emit `SDL_TEXTINPUT`, so the fallback previously received
+only the unmodified SDL key symbol. Patch 0011 maps that symbol and its SDL
+modifiers to an AROS raw-key event, then asks `keymap.library` to produce the
+active keymap's character. This covers shifted punctuation such as `^` and
+`*`, `/`, Caps Lock, and Alt/Amiga layouts instead of hard-coding an English
+keyboard table. The ABIv11 binary builds successfully against the AROS One
+SDK; guest key-input verification has not yet been recorded.
