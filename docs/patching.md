@@ -57,6 +57,10 @@ On 2026-09-22, 0010 (SDL2 `Keysym_to_ANSI` returns no character for keys
 that have none) fixed stray characters from modifier, function and keypad
 keys in text fields; validated on AROS One and packaged in revision
 3; see [the keyboard report](attachments/2026-09-22-keyboard-modifiers/REPORT.md).
+0011 (AROS keymap text fallback) shipped in revision 4 with a build check
+only. On 2026-10-08, 0012 replaced its raw-key lookup (keycode → scancode)
+after a guest test showed the keymap applied twice; see
+[the keyboard layout report](attachments/2026-10-08-keyboard-layouts/REPORT.md).
 
 ## Tool verification record
 

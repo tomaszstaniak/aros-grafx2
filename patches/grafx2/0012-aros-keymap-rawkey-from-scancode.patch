@@ -1,0 +1,179 @@
+Title: 0012-aros-keymap-rawkey-from-scancode
+Repository: grafx2
+Base-Commit: f84cb09dc59d706d6e7b28778b01ba911f52298c
+Requires: 0011-aros-keymap-text-fallback.patch
+Author: aros-grafx2 project
+Date: 2026-10-08
+Upstream-Status: candidate
+Scope: AROS SDL2 text fallback in src/keyboard.c only (Keysym_to_ANSI under __AROS__). Replaces the raw-key lookup of patch 0011.
+
+Problem:
+  Patch 0011 rebuilt the AROS raw key from the SDL keycode. The AROS SDL2 backend (SDL 2.32.10 in the SDK) fills that keycode from the active keymap, so the keymap was applied twice: on QWERTZ z and y swapped, and every key whose unshifted character is above 0x7F (Italian ì ò à è, German ö ü) arrives as a negative keycode and was passed through as 0xFFxx. On the Italian keymap Shift+ì gave nothing instead of ^, Shift++ gave + instead of *, AltGr+ò gave nothing instead of @. Keys missing from 0011's keycode table fell back to the unshifted keycode.
+Solution:
+  Rebuild the raw key from the SDL scancode, which the backend takes positionally from a raw-key table (copied here). Use MapRawKey's result only when it is one printable Latin-1 character; control characters and CSI sequences keep the generic handling, a key with no character (lone modifier, dead key) or a control character produced with Ctrl gives 0, so Ctrl+letter inserts nothing (as in revision 4). KMOD_NUM no longer sets IEQUALIFIER_NUMERICPAD, which marks a keypad key rather than Num Lock. Keyboard shortcuts (Keysym_to_keycode) are unchanged.
+Validation:
+  Host: python3 tests/test-aros-keymap-text.py builds keyboard.c with
+  __AROS__ against a MapRawKey stand-in carrying rows of pc104_usa,
+  pc105_i and pc105_d, and checks the raw-key table against the one read
+  from the SDK's libSDL2.a: 56 failures on the 0011 code (13 key
+  cases, 43 raw keys not mapped back to themselves), 0 on this one.
+  Guest 2026-10-08, AROS One 1.3 x86_64 ABIv11, pool slot v11-2, QEMU TCG,
+  ABIv11 SDK SDL 2.32.10: with SetKeyboard pc105_i the same physical keys
+  typed into the Save-picture comment field gave aA++*yzA on revision 4
+  and aAi^+*@oc*yzA (with i-grave, o-grave, c-cedilla) on this build,
+  identical to the AROS Shell; with pc105_d, zyZ, o/u-umlaut and * as in
+  the Shell. Probe logs show Keysym_to_keycode unchanged. Report:
+  docs/attachments/2026-10-08-keyboard-layouts/REPORT.md.
+Removal:
+  Keep while AROS SDL2 does not emit SDL_TEXTINPUT. The scancode table
+  must match the backend's; recheck it when the SDK's SDL2 changes.
+
+diff --git a/src/keyboard.c b/src/keyboard.c
+index d8bc886c..c0004dbd 100644
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -857,53 +857,58 @@ word Keysym_to_ANSI(SDL_keysym keysym)
+ }
+ #elif defined(USE_SDL2)
+ #if defined(__AROS__)
+-static int AROS_Rawkey_code(SDL_Keycode sym)
+-{
+-  static const UBYTE letter_codes[26] = {
+-    RAWKEY_A, RAWKEY_B, RAWKEY_C, RAWKEY_D, RAWKEY_E, RAWKEY_F, RAWKEY_G,
+-    RAWKEY_H, RAWKEY_I, RAWKEY_J, RAWKEY_K, RAWKEY_L, RAWKEY_M, RAWKEY_N,
+-    RAWKEY_O, RAWKEY_P, RAWKEY_Q, RAWKEY_R, RAWKEY_S, RAWKEY_T, RAWKEY_U,
+-    RAWKEY_V, RAWKEY_W, RAWKEY_X, RAWKEY_Y, RAWKEY_Z
+-  };
++// The AROS SDL2 backend turns a raw key into an SDL scancode with this
++// table, indexed by raw key (scancodes_amigaos.h; the same values are in
++// the SDK's libSDL2.a, SDL 2.32.10 for AROS, SDL_arosevents.o). The scancode
++// is positional and can be inverted. The keycode cannot: the backend fills
++// it from the active keymap, so turning it back into a raw key applied the
++// keymap twice (y and z swapped on QWERTZ), and every keymap character
++// above 0x7F arrives as a negative keycode.
++#define S(x) SDL_SCANCODE_##x
++static const SDL_Scancode AROS_rawkey_scancode[] = {
++  S(GRAVE), S(1), S(2), S(3),                                  // 0x00
++  S(4), S(5), S(6), S(7),                                      // 0x04
++  S(8), S(9), S(0), S(MINUS),                                  // 0x08
++  S(EQUALS), S(BACKSLASH), S(INTERNATIONAL3), S(KP_0),         // 0x0C
++  S(Q), S(W), S(E), S(R),                                      // 0x10
++  S(T), S(Y), S(U), S(I),                                      // 0x14
++  S(O), S(P), S(LEFTBRACKET), S(RIGHTBRACKET),                 // 0x18
++  S(UNKNOWN), S(KP_1), S(KP_2), S(KP_3),                       // 0x1C
++  S(A), S(S), S(D), S(F),                                      // 0x20
++  S(G), S(H), S(J), S(K),                                      // 0x24
++  S(L), S(SEMICOLON), S(APOSTROPHE), S(INTERNATIONAL1),        // 0x28
++  S(UNKNOWN), S(KP_4), S(KP_5), S(KP_6),                       // 0x2C
++  S(INTERNATIONAL2), S(Z), S(X), S(C),                         // 0x30
++  S(V), S(B), S(N), S(M),                                      // 0x34
++  S(COMMA), S(PERIOD), S(SLASH), S(UNKNOWN),                   // 0x38
++  S(KP_PERIOD), S(KP_7), S(KP_8), S(KP_9),                     // 0x3C
++  S(SPACE), S(BACKSPACE), S(TAB), S(KP_ENTER),                 // 0x40
++  S(RETURN), S(ESCAPE), S(DELETE), S(INSERT),                  // 0x44
++  S(PAGEUP), S(PAGEDOWN), S(KP_MINUS), S(F11),                 // 0x48
++  S(UP), S(DOWN), S(RIGHT), S(LEFT),                           // 0x4C
++  S(F1), S(F2), S(F3), S(F4),                                  // 0x50
++  S(F5), S(F6), S(F7), S(F8),                                  // 0x54
++  S(F9), S(F10), S(KP_LEFTPAREN), S(KP_RIGHTPAREN),            // 0x58
++  S(KP_DIVIDE), S(KP_MULTIPLY), S(KP_PLUS), S(SCROLLLOCK),     // 0x5C
++  S(LSHIFT), S(RSHIFT), S(CAPSLOCK), S(LCTRL),                 // 0x60
++  S(LALT), S(RALT), S(LGUI), S(RGUI),                          // 0x64
++  S(UNKNOWN), S(UNKNOWN), S(UNKNOWN), S(MENU),                 // 0x68
++  S(KP_PERIOD), S(PRINTSCREEN), S(PAUSE), S(F12),              // 0x6C
++  S(HOME), S(END)                                              // 0x70
++};
++#undef S
+ 
+-  if (sym >= SDLK_a && sym <= SDLK_z)
+-    return letter_codes[sym - SDLK_a];
+-  if (sym >= SDLK_1 && sym <= SDLK_9)
+-    return RAWKEY_1 + sym - SDLK_1;
++static int AROS_Rawkey_code(SDL_Scancode scancode)
++{
++  int rawkey;
+ 
+-  switch (sym)
+-  {
+-    case SDLK_0:            return RAWKEY_0;
+-    case SDLK_SPACE:        return RAWKEY_SPACE;
+-    case SDLK_MINUS:        return RAWKEY_MINUS;
+-    case SDLK_EQUALS:       return RAWKEY_EQUAL;
+-    case SDLK_LEFTBRACKET:  return RAWKEY_LBRACKET;
+-    case SDLK_RIGHTBRACKET: return RAWKEY_RBRACKET;
+-    case SDLK_BACKSLASH:    return RAWKEY_BACKSLASH;
+-    case SDLK_SEMICOLON:    return RAWKEY_SEMICOLON;
+-    case SDLK_QUOTE:        return RAWKEY_QUOTE;
+-    case SDLK_BACKQUOTE:    return RAWKEY_TILDE;
+-    case SDLK_COMMA:        return RAWKEY_COMMA;
+-    case SDLK_PERIOD:       return RAWKEY_PERIOD;
+-    case SDLK_SLASH:        return RAWKEY_SLASH;
+-    case SDLK_KP_0:         return RAWKEY_KP_0;
+-    case SDLK_KP_1:         return RAWKEY_KP_1;
+-    case SDLK_KP_2:         return RAWKEY_KP_2;
+-    case SDLK_KP_3:         return RAWKEY_KP_3;
+-    case SDLK_KP_4:         return RAWKEY_KP_4;
+-    case SDLK_KP_5:         return RAWKEY_KP_5;
+-    case SDLK_KP_6:         return RAWKEY_KP_6;
+-    case SDLK_KP_7:         return RAWKEY_KP_7;
+-    case SDLK_KP_8:         return RAWKEY_KP_8;
+-    case SDLK_KP_9:         return RAWKEY_KP_9;
+-    case SDLK_KP_PERIOD:    return RAWKEY_KP_DECIMAL;
+-    case SDLK_KP_DIVIDE:    return RAWKEY_KP_DIVIDE;
+-    case SDLK_KP_MULTIPLY:  return RAWKEY_KP_MULTIPLY;
+-    case SDLK_KP_MINUS:     return RAWKEY_KP_MINUS;
+-    case SDLK_KP_PLUS:      return RAWKEY_KP_PLUS;
+-    case SDLK_KP_ENTER:     return RAWKEY_KP_ENTER;
+-    default:                return -1;
+-  }
++  if (scancode == SDL_SCANCODE_UNKNOWN)
++    return -1;
++  // First match: KP_PERIOD appears twice and 0x3C is the keypad key.
++  for (rawkey = 0; rawkey < (int)(sizeof(AROS_rawkey_scancode)/sizeof(AROS_rawkey_scancode[0])); rawkey++)
++    if (AROS_rawkey_scancode[rawkey] == scancode)
++      return rawkey;
++  return -1;
+ }
+ 
+ static UWORD AROS_Qualifier(SDL_Keymod mod)
+@@ -919,15 +924,16 @@ static UWORD AROS_Qualifier(SDL_Keymod mod)
+   if (mod & KMOD_RALT)   qualifier |= IEQUALIFIER_RALT;
+   if (mod & KMOD_LGUI)   qualifier |= IEQUALIFIER_LCOMMAND;
+   if (mod & KMOD_RGUI)   qualifier |= IEQUALIFIER_RCOMMAND;
+-  if (mod & KMOD_NUM)    qualifier |= IEQUALIFIER_NUMERICPAD;
+   return qualifier;
+ }
+ 
++/// Returns 1 when the keymap decided the character (possibly none, as for
++/// a dead key or a lone modifier), 0 to let the generic SDL2 code decide.
+ static int AROS_Keysym_to_ANSI(SDL_Keysym keysym, word *ansi)
+ {
+   struct InputEvent event = { 0 };
+   UBYTE text[8];
+-  int rawkey = AROS_Rawkey_code(keysym.sym);
++  int rawkey = AROS_Rawkey_code(keysym.scancode);
+   WORD length;
+ 
+   if (rawkey < 0)
+@@ -936,7 +942,20 @@ static int AROS_Keysym_to_ANSI(SDL_Keysym keysym, word *ansi)
+   event.ie_Code = rawkey;
+   event.ie_Qualifier = AROS_Qualifier(keysym.mod);
+   length = MapRawKey(&event, (STRPTR)text, sizeof(text), NULL);
+-  *ansi = length > 0 ? text[0] : 0;
++  // A control character produced by Ctrl (Ctrl+A is 0x01) is a command,
++  // not text; the generic code would turn it back into the plain letter.
++  if (length == 0 || (text[0] < 0x20 && (event.ie_Qualifier & IEQUALIFIER_CONTROL)))
++  {
++    *ansi = 0;
++    return 1;
++  }
++  // Control characters (Return, Esc, Tab, Ctrl+letter) and CSI sequences
++  // (cursor and function keys) keep their generic handling, which the
++  // shortcut and editing code expects. A key mapped to a string of more
++  // than one character is not representable in Key_ANSI.
++  if (length != 1 || text[0] < 0x20 || (text[0] >= 0x7F && text[0] < 0xA0))
++    return 0;
++  *ansi = text[0];
+   return 1;
+ }
+ #endif

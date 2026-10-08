@@ -27,8 +27,17 @@ cp "$WORK_DIR/doc/gpl-2.0.txt" "$STAGE/Licenses/gpl-2.0.txt"
 
 cat > "$STAGE/ReadMe.txt" <<'README'
 GrafX2 for AROS x86_64 (ABIv11 / AROS One)
-Version 2.9, AROS package revision 4 (2026-09-25)
+Version 2.9, AROS package revision 5 (2026-10-08)
 GPL-2. See Licenses/. Upstream: https://grafx2.gitlab.io/grafX2/
+
+Revision 5
+  Fix text input on non-US keymaps, which revision 4 got wrong. Text
+  fields now type what the AROS Shell types with the same keymap:
+  on the Italian keymap Shift+i-grave gives ^, Shift++ gives *, AltGr+o-grave
+  gives @, and accented keys type their letters; on German z and y are
+  no longer swapped. Ctrl+letter inserts nothing. Keyboard shortcuts are
+  unchanged. Dead keys (for example German acute then e) do not combine
+  yet: they type the plain letter.
 
 Revision 4
   Text fields use the active AROS keymap. Shift, Alt, Caps Lock and

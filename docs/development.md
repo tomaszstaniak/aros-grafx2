@@ -107,3 +107,12 @@ character contract (host C compiler and Homebrew SDL2 headers required,
 production `keyboard.c` from `work/grafx2`). Guest reproduction steps and
 evidence are in the
 [revision 3 report](attachments/2026-09-22-keyboard-modifiers/REPORT.md).
+
+The AROS keymap branch (`__AROS__`, patches 0011/0012) has its own host test,
+`python3 tests/test-aros-keymap-text.py`. It builds `keyboard.c` against the
+SDK's `devices/rawkeycodes.h` and a `MapRawKey` stand-in with rows of the US,
+Italian and German keymaps. `tests/test-keysym-to-ansi.py` does not define
+`__AROS__` and so does not cover that branch. For the guest,
+`tests/build-guest-keyprobe.sh` builds an SDL2 probe that logs scancode,
+keycode, modifiers, `MapRawKey` output, `Key` and `Key_ANSI` per key; see the
+[keyboard layout report](attachments/2026-10-08-keyboard-layouts/REPORT.md).

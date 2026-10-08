@@ -173,3 +173,17 @@ active keymap's character. This covers shifted punctuation such as `^` and
 `*`, `/`, Caps Lock, and Alt/Amiga layouts instead of hard-coding an English
 keyboard table. The ABIv11 binary builds successfully against the AROS One
 SDK; guest key-input verification has not yet been recorded.
+
+## Revision 5 keymap fix (2026-10-08)
+
+Patch 0011 had no guest test, and on a non-US keymap it was wrong. It rebuilt
+the raw key from the SDL keycode, which the AROS SDL2 backend already takes
+from the active keymap, so the keymap was applied twice. Patch 0012 rebuilds
+the raw key from the positional scancode. Verified on AROS One 1.3 with
+`pc105_i` and `pc105_d`: the comment field now matches the AROS Shell, except
+that dead keys do not compose. Ctrl+letter inserts no text. Shortcuts are
+unchanged. Host test
+`tests/test-aros-keymap-text.py`. Details, limits and the backend's key
+delivery are in the
+[keyboard layout report](../attachments/2026-10-08-keyboard-layouts/REPORT.md).
+Packaged as revision 5. Not tested on mainline v1.
