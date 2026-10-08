@@ -45,7 +45,7 @@ stripping at all.
 | Stage drawer | `scripts/stage.sh` | `build/<target>/package/GrafX2/` (binary, `data/`, icons, ReadMe, Licenses) plus sibling `GrafX2.info` |
 | Package | `LHA_WRITER=<create-capable-lha> scripts/package.sh` | `build/one/grafx2.x86_64-aros-v11.lha` containing `GrafX2/`, sibling `GrafX2.info`, and `.arospkg/manifest.toml`. ABIv11 only. Homebrew Lhasa cannot create archives. |
 | Run on guest | see deploy notes below | Window, skins, paint, PNG/IFF — evidence in attachments |
-| Release archives | `LHA_WRITER=<create-capable-lha> scripts/make-release.sh` | `dist/GrafX2-<ver>.x86_64-aros-v11.lha`, `dist/GrafX2-<ver>-source.zip` (HEAD without `docs/attachments/`), `dist/GrafX2-<ver>-full-source.zip` (patched `work/grafx2` tree), `dist/SHA256SUMS`; `<ver>` is `<upstream>-r<revision>` from the manifest |
+| Release archives | `LHA_WRITER=<create-capable-lha> scripts/make-release.sh` | `dist/GrafX2-<ver>.x86_64-aros-v11.lha`, `dist/GrafX2-<ver>-source.zip` (HEAD without `docs/attachments/`), `dist/GrafX2-<ver>-full-source.zip` (patched `work/grafx2` tree plus the `3rdparty/archives` the build used, i.e. redcode/6502), `dist/SHA256SUMS`; `<ver>` is `<upstream>-r<revision>` from the manifest |
 
 ### Publishing a release
 

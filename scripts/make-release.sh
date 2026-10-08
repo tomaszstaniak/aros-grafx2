@@ -48,6 +48,14 @@ rm -rf "$OUT/$SRC/docs/attachments"
 FULL="GrafX2-$VER-full-source"
 rm -rf "$OUT/$FULL" "$OUT/$FULL.zip"; mkdir -p "$OUT/$FULL"
 git -C "$WORK_DIR" archive --format=tar HEAD | tar -x -C "$OUT/$FULL"
+# The binary also links redcode/6502 (GPL-3+), which build.sh has the
+# upstream 3rdparty makefile download into 3rdparty/archives; that makefile
+# checks the archive's SHA-256 and uses it without network if present.
+# Ship the archives the build used, so this zip builds what was shipped.
+if [ -d "$WORK_DIR/3rdparty/archives" ]; then
+  mkdir -p "$OUT/$FULL/3rdparty/archives"
+  cp "$WORK_DIR"/3rdparty/archives/* "$OUT/$FULL/3rdparty/archives/"
+fi
 ( cd "$OUT" && zip -q -r "$FULL.zip" "$FULL" && rm -rf "$FULL" )
 
 ( cd "$OUT" && shasum -a 256 "$NAME.lha" "$SRC.zip" "$FULL.zip" > SHA256SUMS )
