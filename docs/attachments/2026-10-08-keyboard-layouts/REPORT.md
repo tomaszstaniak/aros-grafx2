@@ -127,3 +127,25 @@ builds `keyprobe-old` from keyboard.c at the given work commit (the 2026-10-08
 run used the commit `0011-aros-keymap-text-fallback.patch`) and
 `keyprobe-new` from the current tree; run `keyprobe RESULTS:<new-name>.txt`, press keys, Esc twice
 to quit. Key sequences: `keys-*.sh` (qcodes for `tools/vmctl.py key`).
+
+## Revision 5 package test
+
+`dist/GrafX2-2.9-r5.x86_64-aros-v11.lha`, binary SHA-256 `3bd9fbf7…99c6`
+(after the Ctrl change). The guest has no `lha`, so the archive was unpacked
+on the host with the same LHa for UNIX 1.14i that created it and staged as a
+ZIP; the `GrafX2` binary was 9 991 264 bytes in the guest, as in the archive.
+Pool slot `v11-3` (ABIv11 2026.09 base, QEMU TCG), `SetKeyboard pc105_i`,
+run from `RAM:p5/x/GrafX2`. Keys: `keys-r5-package.sh`, then Ctrl+a and `k`.
+
+| Where | Result |
+|---|---|
+| AROS Shell (`r5-it-shell.png`) | `aAAAAaì^+*@òç*yz` |
+| Comment field (`r5-it-comment.png`) | `aAAAAaì^+*@òç*yzk` |
+
+So Caps+a and Caps+Shift+a give `A` in both, and Ctrl+a inserted nothing.
+Filename field (`r5-it-filename.png`): `r5`, `Shift+ì`, `Shift++`, `ì` gave
+`NO_NAMEr5^ì`; `*` was refused. Return saved `NO_NAMEr5^ì.gif`, 1 774 bytes
+(`r5-saved-list.png`); GrafX2 then quit normally and wrote its settings.
+`gfx2.lck` stays by design (patch 0006). Not run on AROS One 1.3 with this
+exact binary (the 1.3 runs above used the first 0012 build, which differs
+only in the Ctrl handling) and not on mainline v1.
