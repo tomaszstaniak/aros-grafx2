@@ -36,3 +36,12 @@ abi  = "v11"
 [install]
 subdir = "GrafX2"
 icon   = "GrafX2.info"
+
+# How GrafX2 is started (arospkg 0.5 and later, RFC 0002): from its icon,
+# which carries the 8 MiB stack. The catalogue entry has the same table, and
+# apkg writes GrafX2/application.json from it at installation; a later
+# package may ship that file itself. Tested with revision 5 through the
+# catalogue's table: apkg run on AROS One 1.3, 2026-10-12.
+[launch]
+executable = "GrafX2"
+mode       = "workbench"
